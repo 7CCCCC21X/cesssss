@@ -1,363 +1,125 @@
-<!DOCTYPE html>
-<html lang="zh">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>BSC Pancake v2/v3 大额加流监控 (≥ $500,000)</title>
-<link rel="preconnect" href="https://api.dexscreener.com">
+<!doctype html><html lang="zh"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BSC 新池 & 大额加流监控（API 聚合版）</title>
 <style>
-  :root{--bg:#0b0f14;--card:#121821;--text:#e5e7eb;--muted:#94a3b8;--pri:#60a5fa;--ok:#22c55e;--warn:#f59e0b;--err:#ef4444;--chip:#1f2937}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"PingFang SC",Segoe UI,Roboto,Helvetica,Arial}
-  .wrap{max-width:1200px;margin:18px auto;padding:0 12px}
-  h1{font-size:20px;margin:0 0 12px;color:var(--pri)}
-  .panel{display:flex;gap:12px;flex-wrap:wrap;background:var(--card);border:1px solid #1f2937;border-radius:12px;padding:12px}
-  .panel .item{display:flex;flex-direction:column;gap:6px;min-width:220px}
-  .panel label{font-size:12px;color:var(--muted)}
-  .panel input[type="text"], .panel input[type="number"]{
-    background:#0f172a;border:1px solid #1f2937;border-radius:8px;color:var(--text);padding:8px 10px;outline:none
-  }
-  .panel .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  .btn{background:var(--pri);color:#fff;border:none;border-radius:8px;padding:10px 14px;cursor:pointer}
-  .btn:disabled{opacity:.5;cursor:not-allowed}
-  .chip{background:var(--chip);padding:3px 8px;border-radius:999px;font-size:12px}
-  .status{margin-top:10px;color:var(--muted)}
+  body{margin:0;background:#0b0f14;color:#e5e7eb;font-family:system-ui,-apple-system,"PingFang SC",Segoe UI,Roboto,Helvetica,Arial}
+  .wrap{max-width:1100px;margin:18px auto;padding:0 12px}
+  h1{font-size:20px;margin:0 0 10px;color:#60a5fa}
+  .panel{display:flex;gap:10px;flex-wrap:wrap;background:#111827;border:1px solid #1f2937;border-radius:10px;padding:12px}
+  .panel input{background:#0f172a;border:1px solid #1f2937;color:#e5e7eb;border-radius:8px;padding:8px 10px;outline:none}
+  .btn{background:#60a5fa;color:#fff;border:none;border-radius:8px;padding:9px 14px;cursor:pointer}
+  .muted{color:#94a3b8;font-size:12px}
   table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13px}
   th,td{border-bottom:1px solid #1f2937;padding:8px;text-align:left;white-space:nowrap}
-  th{position:sticky;top:0;background:var(--bg)}
-  td.code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace}
-  .usd{color:var(--ok);font-weight:600}
+  th{position:sticky;top:0;background:#0b0f14}
+  .usd{color:#22c55e;font-weight:600}
   a{color:#9dd6ff;text-decoration:none}
-  a:hover{text-decoration:underline}
-  .hint{font-size:12px;color:var(--muted);margin-top:8px}
-  .row .switch{display:flex;align-items:center;gap:8px}
 </style>
-</head>
-<body>
-<div class="wrap">
-  <h1>BSC Pancake v2/v3 大额加流监控（默认阈值 $500,000）</h1>
-
+</head><body><div class="wrap">
+  <h1>BSC 新池 & 大额加流监控（基于 Birdeye / GeckoTerminal / DEX Screener）</h1>
   <div class="panel">
-    <div class="item" style="flex:1 1 340px">
-      <label>🛰️ BSC WebSocket RPC（用于实时监听）</label>
-      <input id="wss" type="text" placeholder="wss://你的BSC-WSS（建议 QuickNode/Ankr 专属）">
-      <div class="hint">示例：wss://rpc.ankr.com/bsc/ws （公共 WSS 易限流，推荐专属）</div>
-    </div>
-    <div class="item" style="flex:1 1 340px">
-      <label>🌐 BSC HTTP RPC（备用，用于读取 token 信息/价格调用）</label>
-      <input id="http" type="text" placeholder="https://bsc-dataseed1.binance.org">
-    </div>
-    <div class="item">
-      <label>💰 告警阈值（USD）</label>
+    <div>
+      <div class="muted">告警阈值 (USD)</div>
       <input id="th" type="number" value="500000" min="1000" step="5000">
     </div>
-    <div class="item">
-      <label>⏱️ 价格缓存（秒）</label>
-      <input id="ttl" type="number" value="60" min="10" step="10">
+    <div>
+      <div class="muted">轮询间隔（秒）</div>
+      <input id="iv" type="number" value="20" min="10" step="5">
     </div>
-
-    <div class="item" style="min-width:260px">
-      <label>📣 Telegram（可选，前端直发 <span class="chip">不安全</span>）</label>
-      <input id="tgToken" type="text" placeholder="BOT_TOKEN（不建议在公共站点填写）">
-      <input id="tgChat" type="text" placeholder="CHAT_ID">
-      <div class="hint">更安全做法：使用 Vercel 的 /api/notify（见下文 B 方案）。</div>
-    </div>
-
-    <div class="item" style="min-width:220px">
-      <label>🔧 监听模块</label>
-      <div class="row">
-        <label class="switch"><input id="swV2" type="checkbox" checked> Pancake v2（Pair.Mint）</label>
-      </div>
-      <div class="row">
-        <label class="switch"><input id="swV3Pool" type="checkbox" checked> Pancake v3（Pool.Mint）</label>
-      </div>
-      <div class="row">
-        <label class="switch"><input id="swV3NPM" type="checkbox" checked> v3 PositionManager（IncreaseLiquidity）</label>
-      </div>
-    </div>
-
-    <div class="item" style="align-self:flex-end">
-      <div class="row">
-        <button id="start" class="btn">开始监听</button>
-        <button id="stop" class="btn" disabled>停止</button>
-        <span id="stat" class="status">未连接</span>
-      </div>
+    <div style="align-self:end">
+      <button id="start" class="btn">开始</button>
+      <button id="stop" class="btn" disabled>停止</button>
+      <span id="stat" class="muted">未运行</span>
     </div>
   </div>
 
-  <div class="hint">仅统计「单笔新增≥阈值」的加流事件。价格源：DexScreener（选 BSC & 流动性最高的池）。稳定币 USDT/USDC/BUSD 直接按 $1。</div>
+  <h3 style="margin:12px 0 6px">🆕 新池（来自 GeckoTerminal PRO）</h3>
+  <table id="newTbl"><thead>
+    <tr><th>时间</th><th>DEX</th><th>Pool</th><th>Base</th><th>Quote</th></tr>
+  </thead><tbody></tbody></table>
 
-  <table id="tbl">
-    <thead>
-      <tr>
-        <th>时间</th><th>类型</th><th>Pool/Pair</th><th>Token0</th><th>Δ0</th><th>Price0</th>
-        <th>Token1</th><th>Δ1</th><th>Price1</th><th class="usd">估算USD</th><th>交易</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+  <h3 style="margin:18px 0 6px">💧 大额加流（来自 Birdeye Recent Trades）</h3>
+  <table id="liqTbl"><thead>
+    <tr><th>时间</th><th>类型</th><th>Pair</th><th>ΔBase</th><th>ΔQuote</th><th class="usd">估算USD</th><th>交易</th></tr>
+  </thead><tbody></tbody></table>
 </div>
 
-<!-- ethers v5 UMD（浏览器端使用） -->
-<script src="https://cdn.ethers.io/lib/ethers-5.7.umd.min.js"></script>
 <script>
-(async function(){
-  const V2_FACTORY = '0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73'.toLowerCase();
-  const V3_FACTORY = '0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865'.toLowerCase();
-  const V3_NPM     = '0x46a15b0b27311cedf172ab29e4f4766fbe7f4364'.toLowerCase();
-
-  const STABLES = new Set([
-    '0x55d398326f99059ff775485246999027b3197955', // USDT
-    '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d', // USDC
-    '0xe9e7cea3dedca5984780bafc599bd69add087d56'  // BUSD (历史)
-  ].map(s => s.toLowerCase()));
-
-  const ifaceV2Mint = new ethers.utils.Interface([
-    'event Mint(address indexed sender, uint amount0, uint amount1)',
-    'function token0() view returns (address)',
-    'function token1() view returns (address)',
-    'function factory() view returns (address)'
-  ]);
-  const ifaceV3Pool = new ethers.utils.Interface([
-    'event Mint(address sender,address owner,int24 tickLower,int24 tickUpper,uint128 amount,uint256 amount0,uint256 amount1)',
-    'function token0() view returns (address)',
-    'function token1() view returns (address)',
-    'function factory() view returns (address)'
-  ]);
-  const ifaceNPM = new ethers.utils.Interface([
-    'event IncreaseLiquidity(uint256 indexed tokenId,uint128 liquidity,uint256 amount0,uint256 amount1)',
-    'function positions(uint256 tokenId) view returns (uint96,address,address,address,uint24,int24,int24,uint128,uint256,uint256,uint128,uint128)'
-  ]);
-  const ifaceV3Factory = new ethers.utils.Interface([
-    'function getPool(address token0,address token1,uint24 fee) view returns (address)'
-  ]);
-  const ifaceERC20 = new ethers.utils.Interface([
-    'function decimals() view returns (uint8)',
-    'function symbol() view returns (string)'
-  ]);
-  const ifaceERC20Bytes = new ethers.utils.Interface([
-    'function symbol() view returns (bytes32)'
-  ]);
-
-  // UI refs
-  const $ = sel => document.querySelector(sel);
-  const tb = $('#tbl tbody');
+(() => {
+  const $ = s => document.querySelector(s);
+  const newTB = $('#newTbl tbody');
+  const liqTB = $('#liqTbl tbody');
   const stat = $('#stat');
-  const btnStart = $('#start'), btnStop = $('#stop');
+  let timer = null, running = false;
+  const seenTx = new Set();
+  const watchPairs = new Set(); // 被监控的 pair
 
-  // 状态
-  let providerWss = null;
-  let providerHttp = null;
-  let running = false;
-  const seen = new Set();
-  const decCache = new Map();
-  const symCache = new Map();
-  const priceCache = new Map();
+  function fmt(n,d=2){return Number(n).toLocaleString(undefined,{maximumFractionDigits:d});}
+  function tstr(ts){return new Date((ts*1000)||Date.now()).toLocaleString();}
 
-  function nowStr(){ const d=new Date(); return d.toLocaleString(); }
-  function fmt(n, d=2){ return Number(n).toLocaleString(undefined,{maximumFractionDigits:d}); }
+  async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error(r.statusText); return r.json(); }
 
-  async function decimalsOf(addr){
-    const k = addr.toLowerCase();
-    if(decCache.has(k)) return decCache.get(k);
+  async function pullNewPools(){
     try{
-      const c = new ethers.Contract(addr, ifaceERC20, providerHttp);
-      const d = await c.decimals();
-      decCache.set(k, d);
-      return d;
-    }catch(e){ decCache.set(k, 18); return 18; }
-  }
-  async function symbolOf(addr){
-    const k = addr.toLowerCase();
-    if(symCache.has(k)) return symCache.get(k);
-    try{
-      const c = new ethers.Contract(addr, ifaceERC20, providerHttp);
-      const s = await c.symbol();
-      symCache.set(k, s);
-      return s;
-    }catch(e){
-      try{
-        const c2 = new ethers.Contract(addr, ifaceERC20Bytes, providerHttp);
-        const b = await c2.symbol();
-        const s = ethers.utils.parseBytes32String(b);
-        symCache.set(k, s);
-        return s;
-      }catch{ const short = k.slice(0,6); symCache.set(k, short); return short; }
-    }
-  }
-  async function priceUsd(addr, ttlMs){
-    const k = addr.toLowerCase();
-    if(STABLES.has(k)) return 1;
-    const hit = priceCache.get(k);
-    const now = Date.now();
-    if(hit && now - hit.ts < ttlMs) return hit.price;
-
-    try{
-      const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${k}`);
-      const j = await r.json();
-      const pairs = Array.isArray(j && j.pairs) ? j.pairs : [];
-      const best = pairs
-        .filter(p => p && p.chainId==='bsc' && p.priceUsd && !isNaN(+p.priceUsd))
-        .sort((a,b) => (b?.liquidity?.usd||0) - (a?.liquidity?.usd||0))[0];
-      const price = best ? Number(best.priceUsd) : NaN;
-      if(isFinite(price)) { priceCache.set(k,{price,ts:now}); return price; }
-      return NaN;
-    }catch{ return NaN; }
-  }
-
-  async function amountsToUsd(token0, token1, a0Raw, a1Raw, ttlMs){
-    const [d0,d1] = await Promise.all([decimalsOf(token0), decimalsOf(token1)]);
-    const a0 = Number(ethers.utils.formatUnits(a0Raw, d0));
-    const a1 = Number(ethers.utils.formatUnits(a1Raw, d1));
-    const [p0,p1] = await Promise.all([priceUsd(token0, ttlMs), priceUsd(token1, ttlMs)]);
-    return { a0, a1, p0, p1, usd: (isFinite(p0)?a0*p0:0) + (isFinite(p1)?a1*p1:0) };
-  }
-
-  function addRow({type, pool, token0, token1, sym0, sym1, a0, a1, p0, p1, usd, tx}){
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${nowStr()}</td>
-      <td>${type}</td>
-      <td class="code"><a href="https://bscscan.com/address/${pool}" target="_blank">${pool}</a></td>
-      <td>${sym0}</td>
-      <td>${fmt(a0,6)}</td>
-      <td>$${isFinite(p0)?fmt(p0):'--'}</td>
-      <td>${sym1}</td>
-      <td>${fmt(a1,6)}</td>
-      <td>$${isFinite(p1)?fmt(p1):'--'}</td>
-      <td class="usd">$${fmt(usd)}</td>
-      <td><a href="https://bscscan.com/tx/${tx}" target="_blank">查看</a></td>
-    `;
-    tb.prepend(tr);
-  }
-
-  async function notifyTG(text){
-    const token = $('#tgToken').value.trim();
-    const chat  = $('#tgChat').value.trim();
-    if(!token || !chat) return;
-    try{
-      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method:'POST', headers:{'content-type':'application/json'},
-        body: JSON.stringify({ chat_id: chat, text, parse_mode:'HTML', disable_web_page_preview:true })
+      const j = await fetchJSON('/api/gecko-new-pools?network=bsc&page=1');
+      (j.items||[]).forEach(x=>{
+        if(!x.pool_address) return;
+        if(!watchPairs.has(x.pool_address)) watchPairs.add(x.pool_address);
+        const tr=document.createElement('tr');
+        tr.innerHTML = `<td>${x.created_at? new Date(x.created_at).toLocaleString(): ''}</td>
+          <td>${x.dex||''}</td>
+          <td><a href="https://bscscan.com/address/${x.pool_address}" target="_blank">${x.pool_address}</a></td>
+          <td>${x.base||''}</td><td>${x.quote||''}</td>`;
+        newTB.prepend(tr);
       });
-    }catch(e){ console.warn('TG 发送失败', e); }
+    }catch(e){ console.warn('new_pools error', e.message); }
+  }
+
+  // 从 Birdeye recent 取“加流≥阈值”的事件
+  async function pullRecentLiq(thUsd){
+    try{
+      const j = await fetchJSON(`/api/birdeye-recent?chain=bsc&minUsd=${thUsd}`);
+      for(const x of (j.rows||[])){
+        if(!x.txHash || seenTx.has(x.txHash)) continue;
+        seenTx.add(x.txHash);
+        if(x.pair) watchPairs.add(x.pair);
+
+        // 尝试用 DexScreener 再查一次（可选）
+        let delta0 = x.amount0 ?? '', delta1 = x.amount1 ?? '';
+        let usd = x.volumeUSD ?? 0;
+
+        const tr=document.createElement('tr');
+        tr.innerHTML = `<td>${tstr(x.blockTime||0)}</td>
+          <td>${x.type||''}</td>
+          <td>${x.pair? `<a href="https://bscscan.com/address/${x.pair}" target="_blank">${x.pair}</a>`:'—'}</td>
+          <td>${delta0!==''? fmt(delta0,6):'—'}</td>
+          <td>${delta1!==''? fmt(delta1,6):'—'}</td>
+          <td class="usd">$${fmt(usd)}</td>
+          <td>${x.txHash? `<a href="https://bscscan.com/tx/${x.txHash}" target="_blank">查看</a>`:'—'}</td>`;
+        liqTB.prepend(tr);
+      }
+    }catch(e){ console.warn('recent error', e.message); }
   }
 
   function setStatus(s){ stat.textContent = s; }
 
-  async function start(){
+  function start(){
     if(running) return;
-    const wss = $('#wss').value.trim();
-    const http = $('#http').value.trim() || 'https://bsc-dataseed1.binance.org';
-    const ttlSec = Math.max(10, Number($('#ttl').value)||60);
-    const TH = Math.max(1000, Number($('#th').value)||500000);
+    running = true; $('#start').disabled = true; $('#stop').disabled = false;
+    const iv = Math.max(10, Number($('#iv').value)||20)*1000;
+    const th = Math.max(1000, Number($('#th').value)||500000);
+    setStatus(`运行中（${iv/1000}s 刷新，阈值 $${fmt(th,0)}）`);
 
-    if(!wss){ alert('请填写 BSC WebSocket RPC'); return; }
-
-    // 建立 Provider
-    try{
-      providerWss = new ethers.providers.WebSocketProvider(wss);
-      providerHttp = new ethers.providers.JsonRpcProvider(http);
-    }catch(e){
-      alert('RPC 配置错误：' + e.message);
-      return;
-    }
-
-    running = true;
-    btnStart.disabled = true; btnStop.disabled = false;
-    setStatus('连接中…');
-
-    providerWss._websocket.onopen = ()=> setStatus('已连接（实时监听中）');
-    providerWss._websocket.onclose = ()=> { setStatus('连接断开'); stop(); };
-
-    // 订阅 V2 Pair.Mint（全网，后续按 factory 过滤）
-    if($('#swV2').checked){
-      const topic = ethers.utils.id('Mint(address,uint256,uint256)');
-      providerWss.on({ topics:[topic] }, async (log)=>{
-        if(!running) return;
-        const key = `${log.transactionHash}:${log.index}`;
-        if(seen.has(key)) return; seen.add(key);
-
-        const pairAddr = log.address;
-        const pair = new ethers.Contract(pairAddr, ifaceV2Mint, providerHttp);
-        let fac; try{ fac = (await pair.factory()).toLowerCase(); }catch{ return; }
-        if(fac !== V2_FACTORY) return;
-
-        let parsed; try{ parsed = ifaceV2Mint.parseLog(log); }catch{ return; }
-        const [ , amount0, amount1 ] = parsed.args;
-        const [t0, t1] = await Promise.all([pair.token0(), pair.token1()]);
-        const { a0, a1, p0, p1, usd } = await amountsToUsd(t0, t1, amount0, amount1, ttlSec*1000);
-        if(!isFinite(usd) || usd < TH) return;
-
-        const [s0,s1] = await Promise.all([symbolOf(t0), symbolOf(t1)]);
-        addRow({ type:'V2 Mint', pool:pairAddr, token0:t0, token1:t1, sym0:s0, sym1:s1, a0,a1,p0,p1,usd, tx:log.transactionHash });
-        notifyTG(`🟢 <b>Pancake V2 大额加流</b>\nPair: <code>${pairAddr}</code>\nTx: https://bscscan.com/tx/${log.transactionHash}\n${s0}: +${fmt(a0,6)} (~$${fmt(p0)})\n${s1}: +${fmt(a1,6)} (~$${fmt(p1)})\n估算新增：<b>$${fmt(usd)}</b>（阈值 $${fmt(TH,0)}）`);
-      });
-    }
-
-    // 订阅 V3 Pool.Mint
-    if($('#swV3Pool').checked){
-      const topic = ethers.utils.id('Mint(address,address,int24,int24,uint128,uint256,uint256)');
-      providerWss.on({ topics:[topic] }, async (log)=>{
-        if(!running) return;
-        const key = `${log.transactionHash}:${log.index}`;
-        if(seen.has(key)) return; seen.add(key);
-
-        const poolAddr = log.address;
-        const pool = new ethers.Contract(poolAddr, ifaceV3Pool, providerHttp);
-        let fac; try{ fac = (await pool.factory()).toLowerCase(); }catch{ return; }
-        if(fac !== V3_FACTORY) return;
-
-        let parsed; try{ parsed = ifaceV3Pool.parseLog(log); }catch{ return; }
-        const amount0 = parsed.args.amount0, amount1 = parsed.args.amount1;
-        const [t0, t1] = await Promise.all([pool.token0(), pool.token1()]);
-        const { a0, a1, p0, p1, usd } = await amountsToUsd(t0, t1, amount0, amount1, ttlSec*1000);
-        if(!isFinite(usd) || usd < TH) return;
-
-        const [s0,s1] = await Promise.all([symbolOf(t0), symbolOf(t1)]);
-        addRow({ type:'V3 Pool.Mint', pool:poolAddr, token0:t0, token1:t1, sym0:s0, sym1:s1, a0,a1,p0,p1,usd, tx:log.transactionHash });
-        notifyTG(`🟢 <b>Pancake V3 大额加流（Pool.Mint）</b>\nPool: <code>${poolAddr}</code>\nTx: https://bscscan.com/tx/${log.transactionHash}\n${s0}: +${fmt(a0,6)} (~$${fmt(p0)})\n${s1}: +${fmt(a1,6)} (~$${fmt(p1)})\n估算新增：<b>$${fmt(usd)}</b>（阈值 $${fmt(TH,0)}）`);
-      });
-    }
-
-    // 订阅 v3 PositionManager.IncreaseLiquidity（官方地址单点）
-    if($('#swV3NPM').checked){
-      const topic = ethers.utils.id('IncreaseLiquidity(uint256,uint128,uint256,uint256)');
-      providerWss.on({ address: V3_NPM, topics:[topic] }, async (log)=>{
-        if(!running) return;
-        const key = `${log.transactionHash}:${log.index}`;
-        if(seen.has(key)) return; seen.add(key);
-
-        let parsed; try{ parsed = ifaceNPM.parseLog(log); }catch{ return; }
-        const tokenId = parsed.args.tokenId;
-        const amount0 = parsed.args.amount0, amount1 = parsed.args.amount1;
-
-        const npm = new ethers.Contract(V3_NPM, ifaceNPM, providerHttp);
-        let pos; try{ pos = await npm.positions(tokenId); }catch{ return; }
-        const t0 = pos[2], t1 = pos[3], fee = pos[4];
-
-        const { a0, a1, p0, p1, usd } = await amountsToUsd(t0, t1, amount0, amount1, ttlSec*1000);
-        if(!isFinite(usd) || usd < TH) return;
-
-        const [s0,s1] = await Promise.all([symbolOf(t0), symbolOf(t1)]);
-        // 反查 pool 地址（可选，不查也能看 tx）
-        let poolAddr = '—';
-        try{
-          const v3f = new ethers.Contract(V3_FACTORY, ifaceV3Factory, providerHttp);
-          poolAddr = await v3f.getPool(t0, t1, fee);
-        }catch{}
-        addRow({ type:'V3 NPM.IncreaseLiquidity', pool:poolAddr, token0:t0, token1:t1, sym0:s0, sym1:s1, a0,a1,p0,p1,usd, tx:log.transactionHash });
-        notifyTG(`🟢 <b>Pancake V3 大额加流（PositionManager）</b>\nPool: <code>${poolAddr}</code>\nTx: https://bscscan.com/tx/${log.transactionHash}\n${s0}: +${fmt(a0,6)} (~$${fmt(p0)})\n${s1}: +${fmt(a1,6)} (~$${fmt(p1)})\n估算新增：<b>$${fmt(usd)}</b>（阈值 $${fmt(TH,0)}）`);
-      });
-    }
+    // 立即跑一次
+    pullNewPools();
+    pullRecentLiq(th);
+    timer = setInterval(()=>{ pullNewPools(); pullRecentLiq(th); }, iv);
   }
 
   function stop(){
-    if(providerWss){
-      try{ providerWss.removeAllListeners(); }catch{}
-      try{ providerWss._websocket && providerWss._websocket.close(); }catch{}
-    }
-    providerWss = null; running = false;
-    btnStart.disabled = false; btnStop.disabled = true;
+    if(timer) clearInterval(timer);
+    timer=null; running=false;
+    $('#start').disabled=false; $('#stop').disabled=true;
     setStatus('已停止');
   }
 
@@ -365,5 +127,4 @@
   $('#stop').addEventListener('click', stop);
 })();
 </script>
-</body>
-</html>
+</body></html>
