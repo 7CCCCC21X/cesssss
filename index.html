@@ -1,130 +1,422 @@
-<!doctype html><html lang="zh"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BSC 新池 & 大额加流监控（API 聚合版）</title>
-<style>
-  body{margin:0;background:#0b0f14;color:#e5e7eb;font-family:system-ui,-apple-system,"PingFang SC",Segoe UI,Roboto,Helvetica,Arial}
-  .wrap{max-width:1100px;margin:18px auto;padding:0 12px}
-  h1{font-size:20px;margin:0 0 10px;color:#60a5fa}
-  .panel{display:flex;gap:10px;flex-wrap:wrap;background:#111827;border:1px solid #1f2937;border-radius:10px;padding:12px}
-  .panel input{background:#0f172a;border:1px solid #1f2937;color:#e5e7eb;border-radius:8px;padding:8px 10px;outline:none}
-  .btn{background:#60a5fa;color:#fff;border:none;border-radius:8px;padding:9px 14px;cursor:pointer}
-  .muted{color:#94a3b8;font-size:12px}
-  table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13px}
-  th,td{border-bottom:1px solid #1f2937;padding:8px;text-align:left;white-space:nowrap}
-  th{position:sticky;top:0;background:#0b0f14}
-  .usd{color:#22c55e;font-weight:600}
-  a{color:#9dd6ff;text-decoration:none}
-</style>
-</head><body><div class="wrap">
-  <h1>BSC 新池 & 大额加流监控（基于 Birdeye / GeckoTerminal / DEX Screener）</h1>
-  <div class="panel">
-    <div>
-      <div class="muted">告警阈值 (USD)</div>
-      <input id="th" type="number" value="500000" min="1000" step="5000">
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Alpha Token Volume Board</title>
+
+  <!-- ↓↓↓ Vercel Web Analytics ↓↓↓ -->
+  <script>
+    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/insights/script.js"></script>
+  <!-- ↑↑↑ Vercel Web Analytics ↑↑↑ -->
+
+  <style>
+    :root{ --bg:#f9fafb;--text:#1f2937;--sub:#6b7280;--border:#e5e7eb; --green:#16a34a;--red:#dc2626;--primary:#2563eb }
+    @media(prefers-color-scheme:dark){
+      :root{--bg:#1e293b;--text:#f3f4f6;--sub:#9ca3af;--border:#334155}
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{
+      font-family:-apple-system,"Segoe UI","PingFang SC",sans-serif;
+      background:var(--bg);color:var(--text);line-height:1.5
+    }
+    h1{padding:18px 12px;text-align:center;font-size:1.35rem;color:var(--primary)}
+
+    /* 最后更新时间 */
+    .last-up{ text-align:center;font-size:.8rem;color:var(--sub);margin-top:-6px;margin-bottom:12px }
+
+    /* ---------- 顶栏 ---------- */
+    #bar{
+      max-width:1200px;margin:0 auto 12px;
+      display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+      padding:0 6px
+    }
+    #bar-left{flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+    #bar-left input[type="search"]{flex:1;min-width:160px}
+    #bar-left input[type="text"]{width:120px}
+    #bar-left input[type="datetime-local"]{width:190px}
+    #bar-left input{
+      padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:.85rem
+    }
+    .btn{
+      display:inline-flex;align-items:center;gap:4px;
+      padding:6px 12px;font-size:.85rem;border:1px solid var(--primary);
+      color:#fff;background:var(--primary);border-radius:4px;cursor:pointer
+    }
+    .btn[disabled]{background:#9ca3af;border-color:#9ca3af;cursor:not-allowed}
+    .badge{ /* 仅用于进度百分比 */
+      display:none;padding:0 6px;border-radius:10px;font-size:.7rem;font-weight:700;
+      background:#fff;color:var(--primary)
+    }
+    #author{font-size:.8rem;white-space:nowrap}
+    #author a{color:var(--primary);text-decoration:none}
+
+    /* 新增：过滤开关 */
+    .chk{
+      display:inline-flex;align-items:center;gap:6px;
+      font-size:.85rem;color:var(--text);user-select:none
+    }
+
+    /* ---------- 广告位 ---------- */
+    .ad{
+      max-width:1200px;margin:0 auto 10px;padding:8px 10px;
+      display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+      border:1px dashed var(--border);border-radius:6px;background:rgba(0,0,0,.02)
+    }
+    .ad-badge{
+      font-size:.68rem;padding:0 6px;border-radius:8px;color:#fff;background:#6b7280
+    }
+    .ad-note{font-size:.82rem;color:var(--primary)}
+    .ad-links{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+    .ad .btn{padding:6px 10px}
+
+    /* ---------- 表格 ---------- */
+    table{ width:100%;max-width:1200px;margin:0 auto;border-collapse:collapse;min-width:620px }
+    th,td{
+      padding:10px 6px;border-bottom:1px solid var(--border);
+      font-size:.85rem;text-align:left;white-space:nowrap
+    }
+    tbody tr:hover{background:rgba(0,0,0,.04);cursor:pointer}
+    th.sortable{cursor:pointer;user-select:none;position:relative}
+    th.sortable::after{
+      content:'▲';position:absolute;right:4px;font-size:.6rem;color:var(--sub);
+      transform:scale(.8);opacity:0;transition:opacity .2s
+    }
+    th.sortable.desc::after{content:'▼';opacity:1}
+    th.sortable.asc::after{content:'▲';opacity:1}
+
+    /* Star */
+    .star{cursor:pointer;font-size:1rem;color:var(--sub);user-select:none;transition:transform .15s,color .15s}
+    .star.fav{color:#f7b500}.star.bounce{transform:scale(1.4)}
+
+    /* 颜色 & 小字 */
+    .logo{width:18px;height:18px;margin-right:4px;vertical-align:middle;border-radius:50%}
+    .up{color:var(--green)}.down{color:var(--red)}
+    .subl{display:block;font-size:.72rem;color:var(--sub)}
+
+    /* 新增：30天内上新标记 */
+    .tag-new{
+      display:inline-block;margin-left:6px;padding:0 6px;border-radius:10px;
+      font-size:.68rem;line-height:1.4;border:1px solid var(--primary);
+      color:var(--primary);background:rgba(37,99,235,.08)
+    }
+
+    /* Toast */
+    #toast{
+      position:fixed;bottom:40px;left:50%;transform:translateX(-50%);
+      background:rgba(0,0,0,.8);color:#fff;padding:8px 16px;border-radius:6px;
+      font-size:.85rem;opacity:0;pointer-events:none;transition:opacity .3s
+    }
+
+    /* 自定义区间结果 */
+    #customVol{max-width:1200px;margin:4px auto 0;font-size:.9rem;color:var(--primary)}
+    footer{height:16px;margin-bottom:12px}
+
+    @media(max-width:760px){
+      #bar-left input[type="datetime-local"]{flex:1;min-width:140px}
+      .ad-links{width:100%;justify-content:flex-start;margin-left:0}
+    }
+  </style>
+</head>
+<body>
+  <h1>Binance&nbsp;Alpha&nbsp;—&nbsp;24H&nbsp;交易量排行榜</h1>
+  <p id="lastUp" class="last-up"></p>
+
+  <div id="bar">
+    <div id="bar-left">
+      <input id="search" type="search" placeholder="🔍 按代币名称 / 符号过滤…">
+      <button id="refreshBtn" class="btn"> ⟳ 刷新数据 <span id="progress" class="badge">0%</span> </button>
+
+      <!-- 新增：仅看30天内上新 -->
+      <label class="chk"><input id="onlyNew" type="checkbox"> 仅看30天内上新</label>
+
+      <input id="tokenInput" type="text" placeholder="输入代币名称">
+      <input id="startTime" type="datetime-local">
+      <input id="endTime" type="datetime-local">
+      <button id="rangeBtn" class="btn">区间查询</button>
     </div>
-    <div>
-      <div class="muted">轮询间隔（秒）</div>
-      <input id="iv" type="number" value="20" min="10" step="5">
-    </div>
-    <div style="align-self:end">
-      <button id="start" class="btn">开始</button>
-      <button id="stop" class="btn" disabled>停止</button>
-      <span id="stat" class="muted">未运行</span>
+    <div id="author"> 作者&nbsp;<a href="https://twitter.com/0xXIAOc" target="_blank">@0xXIAOc</a> </div>
+  </div>
+
+  <!-- 新增：广告位（表格上方，弱化样式） -->
+  <div class="ad">
+    <span class="ad-badge">广告</span>
+    <span class="ad-note">佣金全返</span>
+    <div class="ad-links">
+      <a class="btn" href="https://web3.okx.com/ul/joindex?ref=XIAOCC" target="_blank" rel="noopener noreferrer">OKX 钱包注册</a>
+      <a class="btn" href="https://web3.binance.com/referral?ref=IIWHBK2V" target="_blank" rel="noopener noreferrer">币安钱包注册</a>
     </div>
   </div>
 
-  <h3 style="margin:12px 0 6px">🆕 新池（来自 GeckoTerminal PRO）</h3>
-  <table id="newTbl"><thead>
-    <tr><th>时间</th><th>DEX</th><th>Pool</th><th>Base</th><th>Quote</th></tr>
-  </thead><tbody></tbody></table>
+  <div id="customVol"></div>
 
-  <h3 style="margin:18px 0 6px">💧 大额加流（来自 Birdeye Recent Trades）</h3>
-  <table id="liqTbl"><thead>
-    <tr><th>时间</th><th>类型</th><th>Pair</th><th>ΔBase</th><th>ΔQuote</th><th class="usd">估算USD</th><th>交易</th></tr>
-  </thead><tbody></tbody></table>
-</div>
+  <table id="tokenTable">
+    <thead>
+      <tr>
+        <th style="width:26px"></th><th>#</th><th>代币名字</th>
+        <th id="thPrice">价格</th>
+        <th id="thVol24h" class="sortable" data-key="vol24h">24H 交易量</th>
+        <th>24H 变化</th>
+        <th id="thToday" class="sortable" data-key="todayQV">当天限价单成交额</th>
+        <th id="thPrev" class="sortable" data-key="prevQV">前一天限价单成交额</th>
+      </tr>
+    </thead>
+    <tbody><tr><td colspan="8">加载中…</td></tr></tbody>
+  </table>
 
-<script>
-(() => {
-  const $ = s => document.querySelector(s);
-  const newTB = $('#newTbl tbody');
-  const liqTB = $('#liqTbl tbody');
-  const stat = $('#stat');
-  let timer = null, running = false;
-  const seenTx = new Set();
-  const watchPairs = new Set(); // 被监控的 pair
+  <div id="toast"></div>
+  <footer></footer>
 
-  function fmt(n,d=2){return Number(n).toLocaleString(undefined,{maximumFractionDigits:d});}
-  function tstr(ts){return new Date((ts*1000)||Date.now()).toLocaleString();}
+  <script>
+    /* ---------- 常量 & 工具 ---------- */
+    const LIST_API='https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list';
+    const K_API ='https://www.binance.com/bapi/defi/v1/public/alpha-trade/klines';
+    const nf0=new Intl.NumberFormat('en-US',{maximumFractionDigits:0});
+    const nf2=new Intl.NumberFormat('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+    const FAV_KEY='alphaFavs',CONCURRENCY=5;
+    const THIRTY_DAYS = 30*24*60*60*1000;
 
-  async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error(r.statusText); return r.json(); }
+    const fmtShort=ts=>new Intl.DateTimeFormat('zh-CN', {
+      timeZone:'Asia/Shanghai',hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'
+    }).format(new Date(ts)).replace(/\//g,'-');
 
-  async function pullNewPools(){
-    try{
-      const j = await fetchJSON('/api/gecko-new-pools?network=bsc&page=1');
-      (j.items||[]).forEach(x=>{
-        if(!x.pool_address) return;
-        if(!watchPairs.has(x.pool_address)) watchPairs.add(x.pool_address);
-        const tr=document.createElement('tr');
-        tr.innerHTML = `<td>${x.created_at? new Date(x.created_at).toLocaleString(): ''}</td>
-          <td>${x.dex||''}</td>
-          <td><a href="https://bscscan.com/address/${x.pool_address}" target="_blank">${x.pool_address}</a></td>
-          <td>${x.base||''}</td><td>${x.quote||''}</td>`;
-        newTB.prepend(tr);
+    const fmtFull=ts=>new Intl.DateTimeFormat('zh-CN', {
+      timeZone:'Asia/Shanghai',hour12:false,year:'numeric',month:'2-digit',day:'2-digit',
+      hour:'2-digit',minute:'2-digit',second:'2-digit'
+    }).format(new Date(ts)).replace(/\//g,'-');
+
+    const nearest8UTC=()=>{
+      const n=new Date(),b=new Date();
+      b.setHours(8,0,0,0);
+      if(n<b)b.setDate(b.getDate()-1);
+      return b.getTime();
+    };
+
+    /* ---------- DOM ---------- */
+    const tbody=document.querySelector('#tokenTable tbody');
+    const refreshBtn=document.getElementById('refreshBtn');
+    const progressEl=document.getElementById('progress');
+    const lastUpEl=document.getElementById('lastUp');
+    const thToday=document.getElementById('thToday');
+    const thPrev =document.getElementById('thPrev');
+    const toast =document.getElementById('toast');
+    const tokenEl=document.getElementById('tokenInput');
+    const startEl=document.getElementById('startTime');
+    const endEl =document.getElementById('endTime');
+    const rangeBtn=document.getElementById('rangeBtn');
+    const customVolEl=document.getElementById('customVol');
+    const onlyNewEl=document.getElementById('onlyNew');
+
+    /* ---------- Toast ---------- */
+    function showToast(msg){
+      toast.textContent=msg;toast.style.opacity='1';
+      setTimeout(()=>toast.style.opacity='0',3000);
+    }
+
+    /* ---------- 状态 ---------- */
+    let rows=[],filter='',sortKey='vol24h',sortDir='desc',showNewOnly=false;
+    window._boundary=nearest8UTC();
+
+    /* ---------- 并发限制 ---------- */
+    function pLimit(n){
+      const q=[];let run=0;
+      const next=()=>{if(run>=n||!q.length)return;run++;q.shift()().finally(()=>{run--;next();});};
+      return fn=>new Promise(res=>{q.push(()=>fn().then(res));next();});
+    }
+    const limit=pLimit(CONCURRENCY);
+
+    /* ---------- Quote Volume ---------- */
+    async function qv(sym,start,end){
+      if(start>=end)return 0;
+      const url=`${K_API}?symbol=${sym}&interval=1h&startTime=${start}&endTime=${end}&limit=1500`;
+      try{
+        const {data=[]}=await fetch(url).then(r=>r.json());
+        return data.reduce((s,k)=>s+parseFloat(k[7]),0);
+      }catch{return 0;}
+    }
+
+    async function fillQVAll(list,today8,yest8,endTs){
+      let done=0,total=list.length;
+      progressEl.style.display='inline-block';
+      await Promise.all(list.map(r=>limit(async()=>{
+        [r.todayQV,r.prevQV]=await Promise.all([
+          qv(r.sym,today8,endTs),
+          qv(r.sym,yest8,today8-1)
+        ]);
+        progressEl.textContent=`${Math.floor(++done/total*100)}%`;
+      })));
+      progressEl.style.display='none';
+    }
+
+    /* ---------- 收藏 ---------- */
+    const favs=()=>JSON.parse(localStorage.getItem(FAV_KEY)||'[]');
+    function toggleFav(sym){
+      const f=favs();const i=f.indexOf(sym);
+      i>-1?f.splice(i,1):f.push(sym);
+      localStorage.setItem(FAV_KEY,JSON.stringify(f));
+      showToast(i>-1?'已移除收藏':'已加入收藏');
+      render();
+    }
+
+    /* ---------- 拉取列表（解析 listingTime 并标记30天内上新） ---------- */
+    async function fetchList(){
+      const resp=await fetch(LIST_API);
+      if(!resp.ok)throw new Error('LIST_API Error');
+      const {data=[]}=await resp.json();
+
+      return data
+        .filter(t=>+t.volume24h>0)
+        .map(t=>{
+          // 兼容秒/毫秒时间戳
+          const raw = Number(t.listingTime || 0);
+          const ltMs = raw ? (raw < 1e12 ? raw*1000 : raw) : 0;
+          const isNew = ltMs ? (Date.now() - ltMs) <= THIRTY_DAYS : false;
+
+          return {
+            price:+t.price,
+            vol24h:+t.volume24h,
+            chg:+t.percentChange24h,
+            symbol:t.symbol,
+            icon:t.iconUrl,
+            sym:`${t.alphaId}USDT`,
+            todayQV:0,
+            prevQV:0,
+            listingTime: ltMs,
+            listingTimeFmt: ltMs ? fmtFull(ltMs) : '',
+            isNew
+          };
+        });
+    }
+
+    /* ---------- 排序 & 渲染 ---------- */
+    function sortRows(arr){
+      return [...arr].sort((a,b)=>sortDir==='desc'?b[sortKey]-a[sortKey]:a[sortKey]-b[sortKey]);
+    }
+    function updateSortIcons(){
+      document.querySelectorAll('th.sortable').forEach(th=>{
+        th.classList.remove('asc','desc');
+        if(th.dataset.key===sortKey)th.classList.add(sortDir);
       });
-    }catch(e){ console.warn('new_pools error', e.message); }
-  }
+    }
 
-  // 从 Birdeye recent 取“加流≥阈值”的事件
-  async function pullRecentLiq(thUsd){
-    try{
-      const j = await fetchJSON(`/api/birdeye-recent?chain=bsc&minUsd=${thUsd}`);
-      for(const x of (j.rows||[])){
-        if(!x.txHash || seenTx.has(x.txHash)) continue;
-        seenTx.add(x.txHash);
-        if(x.pair) watchPairs.add(x.pair);
+    function render(){
+      const favSet=new Set(favs());
+      const filtered=rows.filter(r=>{
+        const matched = r.symbol.toLowerCase().includes(filter)||r.sym.toLowerCase().includes(filter);
+        const newOk = !showNewOnly || r.isNew;
+        return matched && newOk;
+      });
+      const sorted=sortRows(filtered);
+      const display=[...sorted.filter(x=>favSet.has(x.sym)),...sorted.filter(x=>!favSet.has(x.sym))];
 
-        // 尝试用 DexScreener 再查一次（可选）
-        let delta0 = x.amount0 ?? '', delta1 = x.amount1 ?? '';
-        let usd = x.volumeUSD ?? 0;
+      tbody.innerHTML=display.map((t,i)=>`
+        <tr data-sym="${t.sym}">
+          <td class="star ${favSet.has(t.sym)?'fav':''}">${favSet.has(t.sym)?'★':'☆'}</td>
+          <td>${i+1}</td>
+          <td title="${t.listingTimeFmt ? ('上新：'+t.listingTimeFmt) : ''}">
+            <img class="logo" loading="lazy" src="${t.icon}" referrerpolicy="no-referrer"
+                 onerror="this.src='https://bin.bnbstatic.com/static/images/common/base-token-default.png'">
+            ${t.symbol}
+            ${t.isNew ? `<span class="tag-new" title="上新：${t.listingTimeFmt}">🆕</span>` : ''}
+          </td>
+          <td>${nf2.format(t.price)}</td>
+          <td>${nf0.format(t.vol24h)}</td>
+          <td class="${t.chg>=0?'up':'down'}">${t.chg.toFixed(2)}%</td>
+          <td>${t.todayQV?nf0.format(t.todayQV):'…'}</td>
+          <td>${t.prevQV?nf0.format(t.prevQV):'…'}</td>
+        </tr>
+      `).join('');
+      updateSortIcons();
+    }
 
-        const tr=document.createElement('tr');
-        tr.innerHTML = `<td>${tstr(x.blockTime||0)}</td>
-          <td>${x.type||''}</td>
-          <td>${x.pair? `<a href="https://bscscan.com/address/${x.pair}" target="_blank">${x.pair}</a>`:'—'}</td>
-          <td>${delta0!==''? fmt(delta0,6):'—'}</td>
-          <td>${delta1!==''? fmt(delta1,6):'—'}</td>
-          <td class="usd">$${fmt(usd)}</td>
-          <td>${x.txHash? `<a href="https://bscscan.com/tx/${x.txHash}" target="_blank">查看</a>`:'—'}</td>`;
-        liqTB.prepend(tr);
+    /* ---------- 刷新数据 ---------- */
+    async function reloadAll(){
+      refreshBtn.disabled=true;progressEl.textContent='0%';
+      const today8=nearest8UTC(),yest8=today8-864e5,endTs=Date.now();
+
+      thToday.innerHTML=`当天限价单成交额<span class="subl">(${fmtShort(today8)}&nbsp;~&nbsp;${fmtShort(endTs)})</span>`;
+      thPrev.innerHTML =`前一天限价单成交额<span class="subl">(${fmtShort(yest8)}&nbsp;~&nbsp;${fmtShort(today8-1)})</span>`;
+
+      try{
+        rows=await fetchList();
+        await fillQVAll(rows,today8,yest8,endTs);
+        render();
+        lastUpEl.textContent=`最后更新时间： ${fmtFull(Date.now())}`;
+        window._boundary=today8;
+      }catch(e){
+        console.error(e);
+        tbody.innerHTML='<tr><td colspan="8">加载失败…</td></tr>';
+        showToast('加载失败，请稍后重试');
+      }finally{
+        refreshBtn.disabled=false;
       }
-    }catch(e){ console.warn('recent error', e.message); }
-  }
+    }
 
-  function setStatus(s){ stat.textContent = s; }
+    /* ---------- 自定义区间查询 ---------- */
+    (function initDateInputs(){
+      const now=new Date();
+      const pad=n=>String(n).padStart(2,'0');
+      const toLocal=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      startEl.value=toLocal(new Date(nearest8UTC()));
+      endEl.value =toLocal(now);
+    })();
 
-  function start(){
-    if(running) return;
-    running = true; $('#start').disabled = true; $('#stop').disabled = false;
-    const iv = Math.max(10, Number($('#iv').value)||20)*1000;
-    const th = Math.max(1000, Number($('#th').value)||500000);
-    setStatus(`运行中（${iv/1000}s 刷新，阈值 $${fmt(th,0)}）`);
+    rangeBtn.addEventListener('click',async()=>{
+      const sym=tokenEl.value.trim();
+      if(!sym){showToast('请输入代币符号');return;}
 
-    // 立即跑一次
-    pullNewPools();
-    pullRecentLiq(th);
-    timer = setInterval(()=>{ pullNewPools(); pullRecentLiq(th); }, iv);
-  }
+      let row=rows.find(r=>r.symbol.toLowerCase()===sym.toLowerCase()||r.sym.toLowerCase()===sym.toLowerCase());
+      if(!row){
+        const m=sym.match(/_(\d+)/);
+        if(m)row={sym:`${m[1]}USDT`,symbol:sym};
+      }
+      if(!row){showToast('未找到该代币');return;}
 
-  function stop(){
-    if(timer) clearInterval(timer);
-    timer=null; running=false;
-    $('#start').disabled=false; $('#stop').disabled=true;
-    setStatus('已停止');
-  }
+      const st=new Date(startEl.value).getTime(),et=new Date(endEl.value).getTime();
+      if(!st||!et||st>=et){showToast('时间范围不合法');return;}
 
-  $('#start').addEventListener('click', start);
-  $('#stop').addEventListener('click', stop);
-})();
-</script>
-</body></html>
+      rangeBtn.disabled=true;progressEl.textContent='查询…';progressEl.style.display='inline-block';
+      const vol=await qv(row.sym,st,et);
+      rangeBtn.disabled=false;progressEl.style.display='none';
+      customVolEl.innerHTML=`<strong>${row.symbol||sym}</strong> 在&nbsp;<span>${fmtFull(st)}</span> ~ <span>${fmtFull(et)}</span> 的限价单成交额：<strong>${nf0.format(vol)}</strong>`;
+    });
+
+    /* ---------- 其它事件 ---------- */
+    document.getElementById('search').addEventListener('input',e=>{
+      filter=e.target.value.trim().toLowerCase();render();
+    });
+
+    tbody.addEventListener('click',e=>{
+      const s=e.target.closest('.star');
+      if(s){s.classList.add('bounce');setTimeout(()=>s.classList.remove('bounce'),150);toggleFav(s.closest('tr').dataset.sym);}
+    });
+
+    document.querySelectorAll('th.sortable').forEach(th=>{
+      th.addEventListener('click',()=>{
+        const key=th.dataset.key;
+        sortDir=(sortKey===key&&sortDir==='desc')?'asc':'desc';sortKey=key;render();
+      });
+    });
+
+    // 新增：仅看30天内上新开关
+    onlyNewEl.addEventListener('change', (e)=>{
+      showNewOnly = e.target.checked;
+      render();
+    });
+
+    /* ★ 绑定刷新按钮 */
+    refreshBtn.addEventListener('click', reloadAll);
+
+    /* ---------- 自刷新 ---------- */
+    document.addEventListener('visibilitychange',()=>{
+      if(document.visibilityState==='visible'&&nearest8UTC()!==window._boundary)reloadAll();
+    });
+    setInterval(()=>{if(document.visibilityState==='visible')reloadAll();},300000);
+
+    /* ---------- 首次加载 ---------- */
+    reloadAll();
+  </script>
+</body>
+</html>
