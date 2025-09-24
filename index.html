@@ -46,7 +46,7 @@
       color:#fff;background:var(--primary);border-radius:4px;cursor:pointer
     }
     .btn[disabled]{background:#9ca3af;border-color:#9ca3af;cursor:not-allowed}
-    .badge{ /* 仅用于进度百分比 */
+    .badge{
       display:none;padding:0 6px;border-radius:10px;font-size:.7rem;font-weight:700;
       background:#fff;color:var(--primary)
     }
@@ -87,6 +87,9 @@
       padding:10px 6px;border-bottom:1px solid var(--border);
       font-size:.85rem;text-align:left;white-space:nowrap
     }
+    /* ✅ 数字右对齐 + 等宽数字 */
+    th.num, td.num { text-align:right; font-variant-numeric: tabular-nums; }
+
     tbody tr:hover{background:rgba(0,0,0,.04);cursor:pointer}
     th.sortable{cursor:pointer;user-select:none;position:relative}
     th.sortable::after{
@@ -149,16 +152,12 @@
     <div id="author"> 作者&nbsp;<a href="https://twitter.com/0xXIAOc" target="_blank">@0xXIAOc</a> </div>
   </div>
 
-  <!-- 广告位（已在旁边加入 Telegram 徽章） -->
   <div class="ad">
     <span class="ad-badge">广告</span>
     <span class="ad-note">手续费全返</span>
-
-    <!-- ✅ 新增：Telegram 徽章链接 -->
     <a class="tg-badge" href="https://t.me/+lKbtX0zMcAVjYjMx" target="_blank" rel="noopener noreferrer" aria-label="加入 Telegram 频道" title="加入 Telegram 频道">
       <span class="icon">✈️</span> Telegram
     </a>
-
     <div class="ad-links">
       <a class="btn" href="https://web3.binance.com/referral?ref=IIWHBK2V" target="_blank" rel="noopener noreferrer">币安钱包注册</a>
       <a class="btn" href="https://web3.okx.com/ul/joindex?ref=XIAOCC" target="_blank" rel="noopener noreferrer">OKX 钱包注册</a>
@@ -170,12 +169,14 @@
   <table id="tokenTable">
     <thead>
       <tr>
-        <th style="width:26px"></th><th>#</th><th>代币名字</th>
-        <th id="thPrice">价格</th>
-        <th id="thVol24h" class="sortable" data-key="vol24h">24H 交易量</th>
-        <th>24H 变化</th>
-        <th id="thToday" class="sortable" data-key="todayQV">当天限价单成交额</th>
-        <th id="thPrev" class="sortable" data-key="prevQV">前一天限价单成交额</th>
+        <th style="width:26px"></th>
+        <th class="num">#</th>
+        <th>代币名字</th>
+        <th id="thPrice" class="num">价格</th>
+        <th id="thVol24h" class="sortable num" data-key="vol24h">24H 交易量</th>
+        <th class="num">24H 变化</th>
+        <th id="thToday" class="sortable num" data-key="todayQV">当天限价单成交额</th>
+        <th id="thPrev" class="sortable num" data-key="prevQV">前一天限价单成交额</th>
       </tr>
     </thead>
     <tbody><tr><td colspan="8">加载中…</td></tr></tbody>
@@ -344,18 +345,18 @@
         return `
         <tr data-sym="${t.sym}">
           <td class="star ${favSet.has(t.sym)?'fav':''}">${favSet.has(t.sym)?'★':'☆'}</td>
-          <td>${i+1}</td>
+          <td class="num">${i+1}</td>
           <td title="${t.listingTimeFmt ? ('上新：'+t.listingTimeFmt) : ''}">
             <img class="logo" loading="lazy" src="${t.icon}" referrerpolicy="no-referrer"
                  onerror="this.src='https://bin.bnbstatic.com/static/images/common/base-token-default.png'">
             ${t.symbol}
             ${t.isNew ? `<span class="tag-new" title="上新：${t.listingTimeFmt}">🆕 剩${left}天</span>` : ''}
           </td>
-          <td>${nf2.format(t.price)}</td>
-          <td>${nf0.format(t.vol24h)}</td>
-          <td class="${t.chg>=0?'up':'down'}">${t.chg.toFixed(2)}%</td>
-          <td>${t.todayQV?nf0.format(t.todayQV):'…'}</td>
-          <td>${t.prevQV?nf0.format(t.prevQV):'…'}</td>
+          <td class="num">${nf2.format(t.price)}</td>
+          <td class="num">${nf0.format(t.vol24h)}</td>
+          <td class="num ${t.chg>=0?'up':'down'}">${t.chg.toFixed(2)}%</td>
+          <td class="num">${t.todayQV?nf0.format(t.todayQV):'…'}</td>
+          <td class="num">${t.prevQV?nf0.format(t.prevQV):'…'}</td>
         </tr>
       `;
       }).join('');
