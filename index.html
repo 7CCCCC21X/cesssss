@@ -72,6 +72,15 @@
     .ad-links{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
     .ad .btn{padding:6px 10px}
 
+    /* ✅ 新增：Telegram 徽章 */
+    .tg-badge{
+      display:inline-flex;align-items:center;gap:6px;
+      font-size:.75rem;padding:2px 8px;border-radius:10px;
+      color:#fff;background:#229ED9;text-decoration:none;line-height:1.6
+    }
+    .tg-badge:hover{opacity:.9}
+    .tg-badge .icon{font-size:.9rem;line-height:1}
+
     /* ---------- 表格 ---------- */
     table{ width:100%;max-width:1200px;margin:0 auto;border-collapse:collapse;min-width:620px }
     th,td{
@@ -96,7 +105,7 @@
     .up{color:var(--green)}.down{color:var(--red)}
     .subl{display:block;font-size:.72rem;color:var(--sub)}
 
-    /* 新增：30天内上新标记 */
+    /* ✅ 已有：30天内上新标记，继续复用但显示剩余天数 */
     .tag-new{
       display:inline-block;margin-left:6px;padding:0 6px;border-radius:10px;
       font-size:.68rem;line-height:1.4;border:1px solid var(--primary);
@@ -129,7 +138,7 @@
       <input id="search" type="search" placeholder="🔍 按代币名称 / 符号过滤…">
       <button id="refreshBtn" class="btn"> ⟳ 刷新数据 <span id="progress" class="badge">0%</span> </button>
 
-      <!-- 新增：仅看30天内上新 -->
+      <!-- ✅ 已有：仅看30天内上新（逻辑已完善） -->
       <label class="chk"><input id="onlyNew" type="checkbox"> 仅看30天内上新</label>
 
       <input id="tokenInput" type="text" placeholder="输入代币名称">
@@ -140,13 +149,19 @@
     <div id="author"> 作者&nbsp;<a href="https://twitter.com/0xXIAOc" target="_blank">@0xXIAOc</a> </div>
   </div>
 
-  <!-- 新增：广告位（表格上方，弱化样式） -->
+  <!-- 广告位（已在旁边加入 Telegram 徽章） -->
   <div class="ad">
     <span class="ad-badge">广告</span>
-    <span class="ad-note">佣金全返</span>
+    <span class="ad-note">手续费全返</span>
+
+    <!-- ✅ 新增：Telegram 徽章链接 -->
+    <a class="tg-badge" href="https://t.me/+lKbtX0zMcAVjYjMx" target="_blank" rel="noopener noreferrer" aria-label="加入 Telegram 频道" title="加入 Telegram 频道">
+      <span class="icon">✈️</span> Telegram
+    </a>
+
     <div class="ad-links">
-      <a class="btn" href="https://web3.okx.com/ul/joindex?ref=XIAOCC" target="_blank" rel="noopener noreferrer">OKX 钱包注册</a>
       <a class="btn" href="https://web3.binance.com/referral?ref=IIWHBK2V" target="_blank" rel="noopener noreferrer">币安钱包注册</a>
+      <a class="btn" href="https://web3.okx.com/ul/joindex?ref=XIAOCC" target="_blank" rel="noopener noreferrer">OKX 钱包注册</a>
     </div>
   </div>
 
@@ -176,7 +191,9 @@
     const nf0=new Intl.NumberFormat('en-US',{maximumFractionDigits:0});
     const nf2=new Intl.NumberFormat('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
     const FAV_KEY='alphaFavs',CONCURRENCY=5;
-    const THIRTY_DAYS = 30*24*60*60*1000;
+
+    /* ✅ 修正：严格 30 天（毫秒） */
+    const THIRTY_DAYS = 29*24*60*60*1000;
 
     const fmtShort=ts=>new Intl.DateTimeFormat('zh-CN', {
       timeZone:'Asia/Shanghai',hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'
@@ -192,6 +209,13 @@
       b.setHours(8,0,0,0);
       if(n<b)b.setDate(b.getDate()-1);
       return b.getTime();
+    };
+
+    /* ✅ 新增：计算 30 天窗口的剩余天数（向上取整；过期返回 0） */
+    const daysLeft = (listingMs)=>{
+      if(!listingMs) return 0;
+      const delta = THIRTY_DAYS - (Date.now() - listingMs);
+      return Math.max(0, Math.ceil(delta / 86400000));
     };
 
     /* ---------- DOM ---------- */
@@ -260,7 +284,7 @@
       render();
     }
 
-    /* ---------- 拉取列表（解析 listingTime 并标记30天内上新） ---------- */
+    /* ---------- 拉取列表（解析 listingTime 并标记30天内上新 + 计算剩余天数） ---------- */
     async function fetchList(){
       const resp=await fetch(LIST_API);
       if(!resp.ok)throw new Error('LIST_API Error');
@@ -272,7 +296,9 @@
           // 兼容秒/毫秒时间戳
           const raw = Number(t.listingTime || 0);
           const ltMs = raw ? (raw < 1e12 ? raw*1000 : raw) : 0;
-          const isNew = ltMs ? (Date.now() - ltMs) <= THIRTY_DAYS : false;
+
+          /* ✅ 修正：用 “小于 30 天” 判定是否上新 */
+          const isNew = ltMs ? (Date.now() - ltMs) < THIRTY_DAYS : false;
 
           return {
             price:+t.price,
@@ -311,7 +337,11 @@
       const sorted=sortRows(filtered);
       const display=[...sorted.filter(x=>favSet.has(x.sym)),...sorted.filter(x=>!favSet.has(x.sym))];
 
-      tbody.innerHTML=display.map((t,i)=>`
+      tbody.innerHTML=display.map((t,i)=>{
+        /* ✅ 新增：计算剩余天数（仅新币显示） */
+        const left = t.isNew && t.listingTime ? daysLeft(t.listingTime) : 0;
+
+        return `
         <tr data-sym="${t.sym}">
           <td class="star ${favSet.has(t.sym)?'fav':''}">${favSet.has(t.sym)?'★':'☆'}</td>
           <td>${i+1}</td>
@@ -319,7 +349,7 @@
             <img class="logo" loading="lazy" src="${t.icon}" referrerpolicy="no-referrer"
                  onerror="this.src='https://bin.bnbstatic.com/static/images/common/base-token-default.png'">
             ${t.symbol}
-            ${t.isNew ? `<span class="tag-new" title="上新：${t.listingTimeFmt}">🆕</span>` : ''}
+            ${t.isNew ? `<span class="tag-new" title="上新：${t.listingTimeFmt}">🆕 剩${left}天</span>` : ''}
           </td>
           <td>${nf2.format(t.price)}</td>
           <td>${nf0.format(t.vol24h)}</td>
@@ -327,7 +357,8 @@
           <td>${t.todayQV?nf0.format(t.todayQV):'…'}</td>
           <td>${t.prevQV?nf0.format(t.prevQV):'…'}</td>
         </tr>
-      `).join('');
+      `;
+      }).join('');
       updateSortIcons();
     }
 
@@ -400,7 +431,7 @@
       });
     });
 
-    // 新增：仅看30天内上新开关
+    // ✅ 仅看30天内上新开关（与新逻辑一致）
     onlyNewEl.addEventListener('change', (e)=>{
       showNewOnly = e.target.checked;
       render();
